@@ -1,0 +1,294 @@
+# Desktop Hardware Assistant: Application Flow
+
+## Overview
+
+This document outlines the primary flows and interactions within the Desktop Hardware Assistant platform. The system operates as a modular, API-first platform that provides hardware management, compatibility checking, recommendations, and market analysis services.
+
+## System Architecture Flow
+
+The Desktop Hardware Assistant employs a microservices architecture with the following flow of information:
+
+```mermaid
+graph TD
+    Client[Client Applications] --> Gateway[Core API Gateway]
+    Gateway --> Auth[Authentication]
+    Gateway --> Inventory[Hardware Inventory Service]
+    Gateway --> Compatibility[Compatibility Service]
+    Gateway --> Recommendation[Recommendation Service]
+    Gateway --> Market[Market Service]
+    
+    Inventory <--> Database[(MongoDB)]
+    Compatibility <--> Database
+    Recommendation <--> Database
+    Market <--> Database
+    
+    Inventory <--> MessageBus[RabbitMQ]
+    Compatibility <--> MessageBus
+    Recommendation <--> MessageBus
+    Market <--> MessageBus
+    
+    subgraph "Integration Layer"
+        Gateway
+        Webhooks[Webhook System]
+    end
+    
+    MessageBus --> Webhooks
+    Webhooks --> ExternalSystems[External Systems]
+```
+
+## Key User Flows
+
+### 1. User Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway as API Gateway
+    participant Auth as Auth Service
+    participant DB as Database
+    
+    User->>Gateway: Request authentication
+    Gateway->>Auth: Forward auth request
+    Auth->>DB: Validate credentials
+    DB->>Auth: Return user data
+    Auth->>Auth: Generate JWT token
+    Auth->>Gateway: Return token
+    Gateway->>User: Authentication response
+```
+
+### 2. Hardware Inventory Management Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway as API Gateway
+    participant Inventory as Inventory Service
+    participant DB as Database
+    participant MessageBus as RabbitMQ
+    
+    User->>Gateway: Add/Update hardware component
+    Gateway->>Inventory: Forward request
+    Inventory->>DB: Store component data
+    DB->>Inventory: Confirm storage
+    Inventory->>MessageBus: Publish component change event
+    Inventory->>Gateway: Return success
+    Gateway->>User: Confirmation response
+    
+    MessageBus->>Compatibility: Notify of inventory change
+    MessageBus->>Recommendation: Notify of inventory change
+```
+
+### 3. Compatibility Check Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway as API Gateway
+    participant Inventory as Inventory Service
+    participant Compatibility as Compatibility Service
+    participant DB as Database
+    
+    User->>Gateway: Request compatibility check
+    Gateway->>Inventory: Get current components
+    Inventory->>DB: Retrieve component list
+    DB->>Inventory: Return components
+    Inventory->>Gateway: Component list
+    Gateway->>Compatibility: Check compatibility
+    Compatibility->>Compatibility: Apply compatibility rules
+    Compatibility->>Gateway: Compatibility results
+    Gateway->>User: Compatibility report
+```
+
+### 4. Upgrade Recommendation Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway as API Gateway
+    participant Inventory as Inventory Service
+    participant Recommendation as Recommendation Service
+    participant Market as Market Service
+    participant DB as Database
+    
+    User->>Gateway: Request upgrade recommendations
+    Gateway->>Inventory: Get current components
+    Inventory->>DB: Retrieve component list
+    DB->>Inventory: Return components
+    Inventory->>Gateway: Component list
+    Gateway->>Recommendation: Request recommendations
+    Recommendation->>Recommendation: Analyze system bottlenecks
+    Recommendation->>Market: Get price data for upgrades
+    Market->>DB: Retrieve current prices
+    DB->>Market: Return price data
+    Market->>Recommendation: Price information
+    Recommendation->>Gateway: Upgrade recommendations
+    Gateway->>User: Recommendation report
+```
+
+### 5. Market Price Alert Flow
+
+```mermaid
+sequenceDiagram
+    participant Market as Market Service
+    participant DB as Database
+    participant MessageBus as RabbitMQ
+    participant Webhooks as Webhook System
+    participant User
+    
+    Market->>Market: Scheduled price check
+    Market->>DB: Get user watch lists
+    DB->>Market: Watch list data
+    Market->>Market: Detect price drops
+    Market->>MessageBus: Publish price alert event
+    MessageBus->>Webhooks: Forward alert event
+    Webhooks->>User: Send price alert notification
+```
+
+## Data Flow
+
+### Hardware Component Data Flow
+
+```mermaid
+graph LR
+    Input[User Input] --> Validation[Data Validation]
+    Validation --> Processing[Data Processing]
+    Processing --> Storage[Database Storage]
+    Storage --> Retrieval[Data Retrieval]
+    Retrieval --> Analysis[Data Analysis]
+    Analysis --> Output[User Output]
+    
+    subgraph "Data Transformation"
+        Validation
+        Processing
+    end
+    
+    subgraph "Data Persistence"
+        Storage
+        Retrieval
+    end
+    
+    subgraph "Business Logic"
+        Analysis
+    end
+```
+
+## Integration Patterns
+
+### Webhook Notification System
+
+```mermaid
+sequenceDiagram
+    participant Service as Internal Service
+    participant MessageBus as RabbitMQ
+    participant Webhook as Webhook Manager
+    participant Client as External Client
+    
+    Service->>MessageBus: Publish event
+    MessageBus->>Webhook: Forward event
+    Webhook->>Webhook: Format payload
+    Webhook->>Client: Send webhook POST
+    Client->>Webhook: Acknowledge (200 OK)
+    Webhook->>MessageBus: Mark as delivered
+```
+
+### Third-Party API Integration
+
+```mermaid
+graph TD
+    Market[Market Service] --> PriceAPI[Price API Adapter]
+    PriceAPI --> Retailers[Retailer APIs]
+    
+    Market --> ReleaseAPI[Release API Adapter]
+    ReleaseAPI --> Manufacturers[Manufacturer APIs]
+    
+    subgraph "Adapter Layer"
+        PriceAPI
+        ReleaseAPI
+    end
+    
+    subgraph "External Services"
+        Retailers
+        Manufacturers
+    end
+```
+
+## Error Handling Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway as API Gateway
+    participant Service as Microservice
+    participant ErrorHandler as Error Handler
+    
+    Client->>Gateway: Request
+    Gateway->>Service: Forward request
+    Service->>ErrorHandler: Error occurs
+    ErrorHandler->>ErrorHandler: Log error
+    ErrorHandler->>Service: Return error details
+    Service->>Gateway: Error response
+    Gateway->>Client: Formatted error
+```
+
+## Deployment Architecture Flow
+
+```mermaid
+graph TD
+    GitRepo[GitHub Repository] --> CI[CI/CD Pipeline]
+    CI --> Build[Build Images]
+    Build --> Test[Run Tests]
+    Test --> Deploy[Deploy Services]
+    
+    Deploy --> APIGateway[API Gateway Container]
+    Deploy --> InventoryService[Inventory Service Container]
+    Deploy --> CompatibilityService[Compatibility Service Container]
+    Deploy --> RecommendationService[Recommendation Service Container]
+    Deploy --> MarketService[Market Service Container]
+    
+    subgraph "Docker Compose Environment"
+        APIGateway
+        InventoryService
+        CompatibilityService
+        RecommendationService
+        MarketService
+        MongoDB[MongoDB Container]
+        RabbitMQ[RabbitMQ Container]
+    end
+```
+
+## Scalability Considerations
+
+Think of the system like a highway network:
+
+- **Core API Gateway**: The main interchange that directs traffic to the correct roads
+- **Microservices**: Specialized lanes for different types of vehicles (requests)
+- **Message Bus**: Traffic lights and signs that coordinate movement
+- **Database**: Parking structures where vehicles (data) can be stored and retrieved
+
+As traffic increases:
+- Additional lanes (service instances) can be added to busy routes
+- New interchanges (load balancers) distribute traffic evenly
+- Express lanes (caching) provide faster access for common routes
+
+## Security Flow
+
+```mermaid
+graph TD
+    Request[API Request] --> Gateway[API Gateway]
+    Gateway --> Auth[Authentication]
+    Auth --> JWT[JWT Validation]
+    JWT --> Scope[Permission Scope Check]
+    Scope --> RateLimit[Rate Limiting]
+    RateLimit --> Service[Microservice]
+    
+    subgraph "Security Layers"
+        Auth
+        JWT
+        Scope
+        RateLimit
+    end
+```
+
+## Conclusion
+
+This document outlines the key flows within the Desktop Hardware Assistant platform. Understanding these flows is essential for developers integrating with the system or extending its functionality. The modular architecture allows for flexible scaling and enhancement of individual components while maintaining the overall system integrity.
