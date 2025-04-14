@@ -1,0 +1,801 @@
+# Desktop Hardware Assistant: Backend Structure
+
+## Overview
+
+This document details the backend architecture of the Desktop Hardware Assistant platform. The system follows a microservices approach with clear separation of concerns, designed for scalability, maintainability, and ease of integration with external systems.
+
+## Core Architecture
+
+The backend architecture can be conceptualized as a city's infrastructure:
+
+- **API Gateway**: Acts as the central train station where all visitors (requests) arrive and are directed to their appropriate destinations
+- **Microservices**: Specialized districts, each with their own purpose and expertise
+- **Database**: The city archives where all information is stored and retrieved
+- **Message Bus**: The underground metro system connecting all districts and enabling communication
+
+```mermaid
+graph TD
+    Gateway[Core API Gateway] --> Auth[Authentication Service]
+    Gateway --> Inventory[Hardware Inventory Service]
+    Gateway --> Compatibility[Compatibility Service]
+    Gateway --> Recommendation[Recommendation Service]
+    Gateway --> Market[Market Service]
+    
+    subgraph "Service Layer"
+        Auth
+        Inventory
+        Compatibility
+        Recommendation
+        Market
+    end
+    
+    subgraph "Data Layer"
+        MongoDB[(MongoDB)]
+    end
+    
+    subgraph "Communication Layer"
+        RabbitMQ[RabbitMQ]
+    end
+    
+    Auth --> MongoDB
+    Inventory --> MongoDB
+    Compatibility --> MongoDB
+    Recommendation --> MongoDB
+    Market --> MongoDB
+    
+    Auth --> RabbitMQ
+    Inventory --> RabbitMQ
+    Compatibility --> RabbitMQ
+    Recommendation --> RabbitMQ
+    Market --> RabbitMQ
+```
+
+## Directory Structure
+
+The project follows a modular structure with clear separation between services:
+
+```
+desktop-hardware-assistant/
+├── api_gateway/                # Core API Gateway Service
+│   ├── src/
+│   │   ├── auth/               # Authentication middleware
+│   │   ├── routes/             # Route definitions
+│   │   ├── middleware/         # Custom middleware
+│   │   └── main.py             # Gateway entry point
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── services/
+│   ├── auth_service/           # Authentication Service
+│   │   ├── src/
+│   │   │   ├── models/         # Data models
+│   │   │   ├── controllers/    # Business logic
+│   │   │   ├── repositories/   # Data access
+│   │   │   └── main.py         # Service entry point
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   │
+│   ├── inventory_service/      # Hardware Inventory Service
+│   │   ├── src/
+│   │   │   ├── models/         # Component models
+│   │   │   ├── controllers/    # Inventory logic
+│   │   │   ├── repositories/   # Data access
+│   │   │   └── main.py         # Service entry point
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   │
+│   ├── compatibility_service/  # Compatibility Service
+│   │   ├── src/
+│   │   │   ├── models/         # Compatibility models
+│   │   │   ├── controllers/    # Rule engine
+│   │   │   ├── rules/          # Compatibility rules
+│   │   │   └── main.py         # Service entry point
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   │
+│   ├── recommendation_service/ # Recommendation Service
+│   │   ├── src/
+│   │   │   ├── models/         # Recommendation models
+│   │   │   ├── controllers/    # Analysis logic
+│   │   │   ├── algorithms/     # Recommendation algorithms
+│   │   │   └── main.py         # Service entry point
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   │
+│   └── market_service/         # Market Service
+│       ├── src/
+│       │   ├── models/         # Price models
+│       │   ├── controllers/    # Price tracking logic
+│       │   ├── adapters/       # External API adapters
+│       │   └── main.py         # Service entry point
+│       ├── Dockerfile
+│       └── requirements.txt
+│
+├── shared/                     # Shared code between services
+│   ├── models/                 # Common data models
+│   ├── utils/                  # Utility functions
+│   └── constants/              # System constants
+│
+├── database/                   # Database scripts and migrations
+│   ├── migrations/             # Database migrations
+│   └── seeds/                  # Seed data
+│
+├── message_bus/                # Message bus configuration
+│   └── rabbitmq/               # RabbitMQ specific configuration
+│
+├── docs/                       # System documentation
+│   ├── api/                    # API documentation
+│   ├── architecture/           # Architecture documents
+│   └── guides/                 # User and developer guides
+│
+├── tests/                      # Test suite
+│   ├── unit/                   # Unit tests
+│   ├── integration/            # Integration tests
+│   └── e2e/                    # End-to-end tests
+│
+├── docker-compose.yml          # Docker Compose configuration
+├── .env.example                # Example environment variables
+└── README.md                   # Project overview
+```
+
+## Microservice Architecture
+
+Each microservice follows a consistent internal architecture pattern:
+
+```mermaid
+graph LR
+    API[API Layer] --> Controller[Controller Layer]
+    Controller --> Service[Service Layer]
+    Service --> Repository[Repository Layer]
+    Repository --> Database[(Database)]
+    
+    subgraph "Presentation"
+        API
+    end
+    
+    subgraph "Business Logic"
+        Controller
+        Service
+    end
+    
+    subgraph "Data Access"
+        Repository
+    end
+```
+
+### Common Service Structure
+
+Each service implements the following layers:
+
+1. **API Layer**: Handles HTTP requests and responses
+2. **Controller Layer**: Orchestrates business operations
+3. **Service Layer**: Implements core business logic
+4. **Repository Layer**: Manages data access operations
+5. **Model Layer**: Defines data structures and validation
+
+## Individual Service Details
+
+### Authentication Service
+
+The authentication service manages user identity and access control.
+
+```mermaid
+classDiagram
+    class AuthController {
+        +login(credentials)
+        +register(userData)
+        +refreshToken(token)
+        +validateToken(token)
+    }
+    
+    class UserService {
+        +createUser(userData)
+        +findUserByEmail(email)
+        +validatePassword(password, hash)
+        +generateTokens(userId)
+    }
+    
+    class UserRepository {
+        +create(user)
+        +findById(id)
+        +findByEmail(email)
+        +update(id, data)
+    }
+    
+    class User {
+        +id: string
+        +email: string
+        +passwordHash: string
+        +roles: string[]
+        +createdAt: date
+        +updatedAt: date
+    }
+    
+    AuthController --> UserService
+    UserService --> UserRepository
+    UserRepository --> User
+```
+
+### Hardware Inventory Service
+
+Manages the user's hardware component inventory.
+
+```mermaid
+classDiagram
+    class InventoryController {
+        +getComponents(userId)
+        +getComponent(componentId)
+        +addComponent(componentData)
+        +updateComponent(componentId, data)
+        +deleteComponent(componentId)
+    }
+    
+    class ComponentService {
+        +listComponents(filters)
+        +getComponentDetails(id)
+        +createComponent(data)
+        +updateComponent(id, data)
+        +removeComponent(id)
+    }
+    
+    class ComponentRepository {
+        +findAll(filters)
+        +findById(id)
+        +create(component)
+        +update(id, data)
+        +delete(id)
+    }
+    
+    class Component {
+        +id: string
+        +userId: string
+        +type: string
+        +brand: string
+        +model: string
+        +specifications: object
+        +purchaseDate: date
+        +price: number
+        +status: string
+    }
+    
+    InventoryController --> ComponentService
+    ComponentService --> ComponentRepository
+    ComponentRepository --> Component
+```
+
+### Compatibility Service
+
+Evaluates hardware component compatibility.
+
+```mermaid
+classDiagram
+    class CompatibilityController {
+        +checkCompatibility(components)
+        +validateBuild(components)
+        +getCompatibilityIssues(components)
+    }
+    
+    class CompatibilityService {
+        +analyzeCompatibility(components)
+        +validateCompleteSystem(components)
+        +identifyIssues(components)
+    }
+    
+    class RuleEngine {
+        +applyRules(components, ruleSet)
+        +evaluateRule(rule, components)
+        +getRuleSet(componentTypes)
+    }
+    
+    class CompatibilityRule {
+        +id: string
+        +name: string
+        +description: string
+        +componentTypes: string[]
+        +validationLogic: function
+        +severity: string
+    }
+    
+    CompatibilityController --> CompatibilityService
+    CompatibilityService --> RuleEngine
+    RuleEngine --> CompatibilityRule
+```
+
+### Recommendation Service
+
+Provides hardware upgrade recommendations.
+
+```mermaid
+classDiagram
+    class RecommendationController {
+        +getRecommendations(userId, budget)
+        +getBottlenecks(components)
+        +simulateUpgrade(components, upgrades)
+    }
+    
+    class RecommendationService {
+        +generateRecommendations(components, constraints)
+        +analyzeBottlenecks(components)
+        +calculateUpgradeImpact(current, proposed)
+    }
+    
+    class PerformanceAnalyzer {
+        +identifyWeakPoints(system)
+        +calculateSystemScore(components)
+        +compareConfigurations(baseConfig, newConfig)
+    }
+    
+    class RecommendationRepository {
+        +saveRecommendation(recommendation)
+        +getUserRecommendations(userId)
+        +getRecommendationHistory(userId)
+    }
+    
+    RecommendationController --> RecommendationService
+    RecommendationService --> PerformanceAnalyzer
+    RecommendationService --> RecommendationRepository
+```
+
+### Market Service
+
+Monitors hardware prices and market trends.
+
+```mermaid
+classDiagram
+    class MarketController {
+        +getComponentPrices(componentType, specs)
+        +getPriceHistory(componentId)
+        +setAlertThreshold(componentId, price)
+        +getDeals(preferences)
+    }
+    
+    class PriceService {
+        +getCurrentPrices(filters)
+        +trackPriceHistory(componentId)
+        +manageAlerts(userId, alerts)
+        +findDeals(preferences)
+    }
+    
+    class RetailerAdapter {
+        +fetchPriceData(componentType, specs)
+        +parseRetailerResponse(response)
+        +normalizeData(data)
+    }
+    
+    class PriceRepository {
+        +savePricePoint(priceData)
+        +getPriceTimeSeries(componentId)
+        +getUserAlerts(userId)
+        +createAlert(alertData)
+    }
+    
+    MarketController --> PriceService
+    PriceService --> RetailerAdapter
+    PriceService --> PriceRepository
+```
+
+## API Gateway Structure
+
+The API Gateway serves as the single entry point for all client requests.
+
+```mermaid
+graph TD
+    Client[Client] --> Gateway[API Gateway]
+    
+    subgraph "API Gateway Components"
+        Gateway --> Router[Request Router]
+        Gateway --> Auth[Auth Middleware]
+        Gateway --> RateLimit[Rate Limiter]
+        Gateway --> Validation[Request Validator]
+        Gateway --> Documentation[API Documentation]
+    end
+    
+    Router --> ServiceA[Service A]
+    Router --> ServiceB[Service B]
+    Router --> ServiceC[Service C]
+```
+
+### Gateway Routes
+
+The API Gateway exposes the following route groups:
+
+```
+/api
+  /auth
+    /login          - POST
+    /register       - POST
+    /refresh        - POST
+    /profile        - GET
+  
+  /inventory
+    /components     - GET, POST
+    /components/:id - GET, PUT, DELETE
+    /systems        - GET, POST
+    /systems/:id    - GET, PUT, DELETE
+  
+  /compatibility
+    /check          - POST
+    /validate-build - POST
+    /issues         - POST
+  
+  /recommendations
+    /upgrade        - GET
+    /bottlenecks    - GET
+    /simulate       - POST
+  
+  /market
+    /prices         - GET
+    /history/:id    - GET
+    /alerts         - GET, POST
+    /alerts/:id     - GET, PUT, DELETE
+    /deals          - GET
+```
+
+## Database Schema
+
+```mermaid
+erDiagram
+    USERS ||--o{ COMPONENTS : owns
+    USERS ||--o{ SYSTEMS : creates
+    USERS ||--o{ PRICE_ALERTS : sets
+    
+    COMPONENTS ||--o{ SYSTEM_COMPONENTS : included_in
+    SYSTEMS ||--o{ SYSTEM_COMPONENTS : contains
+    
+    COMPONENTS ||--o{ PRICE_POINTS : tracked_by
+    COMPONENTS ||--o{ COMPATIBILITY_RULES : governed_by
+    
+    USERS {
+        string id PK
+        string email
+        string passwordHash
+        string[] roles
+        datetime createdAt
+        datetime updatedAt
+    }
+    
+    COMPONENTS {
+        string id PK
+        string userId FK
+        string type
+        string brand
+        string model
+        json specifications
+        datetime purchaseDate
+        number price
+        string status
+        datetime createdAt
+        datetime updatedAt
+    }
+    
+    SYSTEMS {
+        string id PK
+        string userId FK
+        string name
+        string description
+        datetime createdAt
+        datetime updatedAt
+    }
+    
+    SYSTEM_COMPONENTS {
+        string id PK
+        string systemId FK
+        string componentId FK
+        datetime addedAt
+    }
+    
+    COMPATIBILITY_RULES {
+        string id PK
+        string name
+        string description
+        string[] componentTypes
+        string validationLogic
+        string severity
+    }
+    
+    PRICE_POINTS {
+        string id PK
+        string componentId FK
+        string retailerId
+        number price
+        string url
+        datetime recordedAt
+    }
+    
+    PRICE_ALERTS {
+        string id PK
+        string userId FK
+        string componentId FK
+        number targetPrice
+        boolean isActive
+        datetime createdAt
+    }
+    
+    RECOMMENDATIONS {
+        string id PK
+        string userId FK
+        json currentComponents
+        json recommendedUpgrades
+        number estimatedCost
+        number performanceGain
+        datetime createdAt
+    }
+```
+
+## Message Bus Architecture
+
+The RabbitMQ message bus facilitates asynchronous communication between services.
+
+```mermaid
+graph LR
+    P1[Producer] -->|Publish| Exchange[Exchange]
+    Exchange -->|Route| Q1[Queue 1]
+    Exchange -->|Route| Q2[Queue 2]
+    Q1 -->|Consume| C1[Consumer 1]
+    Q2 -->|Consume| C2[Consumer 2]
+```
+
+### Message Topics
+
+The system uses the following message topics:
+
+1. **inventory.component.added**
+2. **inventory.component.updated**
+3. **inventory.component.removed**
+4. **compatibility.issue.detected**
+5. **recommendation.generated**
+6. **market.price.changed**
+7. **market.alert.triggered**
+
+## Authentication and Authorization
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway as API Gateway
+    participant Auth as Auth Service
+    participant Service as Protected Service
+    
+    Client->>Gateway: Request with Bearer token
+    Gateway->>Auth: Validate token
+    Auth->>Auth: Verify signature
+    Auth->>Auth: Check expiration
+    Auth->>Gateway: Token valid + user claims
+    Gateway->>Gateway: Check permission scopes
+    Gateway->>Service: Forward request with user context
+    Service->>Service: Apply fine-grained permissions
+    Service->>Gateway: Response
+    Gateway->>Client: Forward response
+```
+
+## Error Handling Structure
+
+The system implements a standardized error handling approach:
+
+```mermaid
+graph TD
+    Error[Error Occurs] --> Capture[Capture Error]
+    Capture --> Log[Log Error]
+    Capture --> Format[Format Error Response]
+    Format --> Client[Return to Client]
+    
+    subgraph "Error Types"
+        ValidationError[Validation Error]
+        AuthError[Authentication Error]
+        PermissionError[Permission Error]
+        NotFoundError[Not Found Error]
+        ServerError[Server Error]
+    end
+    
+    Error --> ValidationError
+    Error --> AuthError
+    Error --> PermissionError
+    Error --> NotFoundError
+    Error --> ServerError
+```
+
+### Standard Error Response Format
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid input data",
+    "details": [
+      {
+        "field": "cpuModel",
+        "message": "CPU model is required"
+      }
+    ],
+    "requestId": "req-123456",
+    "timestamp": "2025-04-14T12:34:56Z"
+  }
+}
+```
+
+## Deployment Architecture
+
+```mermaid
+graph TD
+    Source[Source Code] --> Build[Build Process]
+    Build --> Test[Test Suite]
+    Test --> Package[Package Services]
+    Package --> Deploy[Deployment]
+    
+    subgraph "Environment: Development"
+        DevEnv[Development Environment]
+    end
+    
+    subgraph "Environment: Staging"
+        StagingEnv[Staging Environment]
+    end
+    
+    subgraph "Environment: Production"
+        ProdEnv[Production Environment]
+    end
+    
+    Deploy --> DevEnv
+    Deploy --> StagingEnv
+    Deploy --> ProdEnv
+```
+
+### Container Orchestration
+
+```mermaid
+graph TD
+    Docker[Docker Images] --> Compose[Docker Compose]
+    Compose --> LocalDev[Local Development]
+    
+    Docker --> K8s[Kubernetes]
+    K8s --> Staging[Staging]
+    K8s --> Production[Production]
+    
+    subgraph "Infrastructure"
+        Monitoring[Monitoring]
+        Logging[Logging]
+        Scaling[Auto-scaling]
+    end
+    
+    K8s --> Monitoring
+    K8s --> Logging
+    K8s --> Scaling
+```
+
+## Development Workflow
+
+```mermaid
+graph LR
+    Feature[Feature Branch] --> PR[Pull Request]
+    PR --> Review[Code Review]
+    Review --> CI[CI Pipeline]
+    CI --> Merge[Merge to Main]
+    Merge --> CD[CD Pipeline]
+    CD --> Deploy[Deployment]
+```
+
+## Logging and Monitoring Structure
+
+```mermaid
+graph TD
+    Services[Microservices] --> Logs[Log Events]
+    Services --> Metrics[Performance Metrics]
+    Services --> Traces[Distributed Traces]
+    
+    Logs --> LogAggregator[Log Aggregator]
+    Metrics --> TimeSeriesDB[Time Series DB]
+    Traces --> TraceCollector[Trace Collector]
+    
+    LogAggregator --> Dashboard[Monitoring Dashboard]
+    TimeSeriesDB --> Dashboard
+    TraceCollector --> Dashboard
+    
+    Dashboard --> Alerts[Alert System]
+```
+
+## Performance Considerations
+
+### Caching Strategy
+
+Think of the caching system like a kitchen pantry:
+
+- **L1 Cache**: The countertop - very small but fastest access for frequently used items
+- **L2 Cache**: The kitchen cabinets - larger but slightly slower access
+- **Distributed Cache**: The pantry - large storage for items needed by multiple dishes (services)
+
+```mermaid
+graph TD
+    Request[Client Request] --> L1[L1 Cache]
+    L1 -->|Miss| L2[L2 Cache]
+    L2 -->|Miss| Redis[Redis Cache]
+    Redis -->|Miss| Service[Microservice]
+    Service --> DB[Database]
+    
+    Service -->|Update| Redis
+    Redis -->|Update| L2
+    L2 -->|Update| L1
+```
+
+### Performance Optimization Areas
+
+1. **Query Optimization**: Like tuning a car engine for maximum efficiency
+2. **Connection Pooling**: Similar to a taxi stand - reuse connections rather than creating new ones
+3. **Data Indexing**: Like a book index - allows quick lookup without scanning the entire content
+4. **Load Balancing**: Similar to multiple checkout lanes at a store - distributes traffic evenly
+
+## Security Implementation
+
+### Security Layers
+
+```mermaid
+graph TD
+    External[External Request] --> WAF[Web Application Firewall]
+    WAF --> Gateway[API Gateway]
+    Gateway --> Auth[Authentication]
+    Auth --> Authorization[Authorization]
+    Authorization --> RateLimit[Rate Limiting]
+    RateLimit --> InputValidation[Input Validation]
+    InputValidation --> Service[Microservice]
+    
+    subgraph "Perimeter Security"
+        WAF
+    end
+    
+    subgraph "Gateway Security"
+        Gateway
+        Auth
+        Authorization
+        RateLimit
+    end
+    
+    subgraph "Application Security"
+        InputValidation
+        Service
+    end
+```
+
+### Data Protection Measures
+
+1. **Data Encryption**: Like securing valuables in a safe
+   - At rest (database encryption)
+   - In transit (TLS/SSL)
+   - Field-level encryption for sensitive data
+
+2. **Sensitive Data Handling**:
+   - Masking: Like redacting portions of a document
+   - Tokenization: Like using a claim ticket instead of the actual item
+
+## Testing Strategy
+
+```mermaid
+graph TD
+    Code[Code Changes] --> UnitTests[Unit Tests]
+    UnitTests --> IntegrationTests[Integration Tests]
+    IntegrationTests --> E2ETests[End-to-End Tests]
+    E2ETests --> PerformanceTests[Performance Tests]
+    PerformanceTests --> SecurityTests[Security Tests]
+    
+    subgraph "Test Automation"
+        UnitTests
+        IntegrationTests
+        E2ETests
+    end
+    
+    subgraph "Quality Assurance"
+        PerformanceTests
+        SecurityTests
+    end
+```
+
+## Conclusion
+
+This backend structure document provides a comprehensive overview of the Desktop Hardware Assistant's architecture. The modular design allows for independent development and scaling of services while maintaining system cohesion through well-defined interfaces and communication patterns. Developers should follow these architectural guidelines to ensure consistency across the platform.
+
+The system architecture is designed to be:
+
+1. **Scalable**: Like a modular building - add new floors (services) as needed
+2. **Resilient**: Like a ship with watertight compartments - failure in one area doesn't sink the entire system
+3. **Maintainable**: Like a well-organized toolbox - everything has its place and purpose
+4. **Secure**: Like a medieval castle with multiple layers of defense
+5. **Extensible**: Like a LEGO set - easily add new features by connecting to existing structures
+
+By following these architectural principles, the Desktop Hardware Assistant can provide a robust, performant, and secure platform for managing hardware components and recommendations.
